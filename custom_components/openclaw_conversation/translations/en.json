@@ -1,0 +1,22 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to OpenClaw",
+        "description": "Enter your OpenClaw Gateway URL and API token.",
+        "data": {
+          "name": "Name",
+          "base_url": "OpenClaw Gateway URL",
+          "api_key": "API Token",
+          "model": "Model",
+          "timeout": "Timeout (seconds)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect to OpenClaw Gateway. Check the URL.",
+      "invalid_auth": "Invalid API token.",
+      "endpoint_disabled": "Chat Completions endpoint is not enabled on the Gateway."
+    }
+  }
+}
