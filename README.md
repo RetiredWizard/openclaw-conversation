@@ -50,7 +50,7 @@ The Home Assistant instance must be able to reach your OpenClaw Gateway over the
 **Common issues:**
 - **Firewall blocking the port**: If your gateway runs on a separate machine, make sure the gateway port (default `18789`) is open. Example with UFW:
   ```bash
-  sudo ufw allow from 192.168.0.0/24 to any port 18789 proto tcp
+  sudo ufw allow from 192.168.1.0/24 to any port 18789 proto tcp
   ```
 - **Using `127.0.0.1`**: This only works if HA and OpenClaw run on the same machine. If they're on separate devices, use the gateway machine's LAN IP (e.g., `http://192.168.1.100:18789`).
 - **Docker networking**: If HA runs in Docker, `127.0.0.1` refers to the container, not the host. Use the host's LAN IP or Docker network gateway.
