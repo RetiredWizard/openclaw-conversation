@@ -41,15 +41,10 @@ class OpenClawConversationAgent(conversation.AbstractConversationAgent):
         self._session = session
         self._base_url = entry.data[CONF_BASE_URL]
         self._api_key = entry.data[CONF_API_KEY]
-        self._model = entry.options.get(
-            CONF_MODEL, entry.data.get(CONF_MODEL, DEFAULT_MODEL)
-        )
-        self._timeout = entry.options.get(
-            CONF_TIMEOUT, entry.data.get(CONF_TIMEOUT, DEFAULT_TIMEOUT)
-        )
+        self._model = entry.options.get(CONF_MODEL, DEFAULT_MODEL)
+        self._timeout = entry.options.get(CONF_TIMEOUT, DEFAULT_TIMEOUT)
         self._system_prompt = entry.options.get(
-            CONF_SYSTEM_PROMPT,
-            entry.data.get(CONF_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT),
+            CONF_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT
         )
         self._conversations: dict[str, list[dict]] = {}
 
