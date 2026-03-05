@@ -46,7 +46,6 @@ class OpenClawConversationAgent(conversation.AbstractConversationAgent):
         self._system_prompt = entry.options.get(
             CONF_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT
         )
-        self._conversations: dict[str, list[dict]] = {}
 
     @property
     def attribution(self) -> dict[str, str]:
@@ -64,12 +63,11 @@ class OpenClawConversationAgent(conversation.AbstractConversationAgent):
         """Process a sentence."""
         conversation_id = user_input.conversation_id or ulid.ulid_now()
 
-        messages = self._conversations.get(conversation_id, [])
-        messages.append({"role": "user", "content": user_input.text})
-
         try:
             start = time.monotonic()
-            response_text = await self._call_openclaw(messages, conversation_id)
+            response_text = await self._call_openclaw(
+                user_input.text, conversation_id
+            )
             elapsed = time.monotonic() - start
             _LOGGER.info(
                 "OpenClaw responded in %.1fs (%d chars)",
@@ -80,9 +78,6 @@ class OpenClawConversationAgent(conversation.AbstractConversationAgent):
             _LOGGER.error("Error calling OpenClaw: %s: %s", type(err).__name__, err)
             response_text = "Erreur de communication avec OpenClaw."
 
-        messages.append({"role": "assistant", "content": response_text})
-        self._conversations[conversation_id] = messages[-20:]
-
         response = intent.IntentResponse(language=user_input.language)
         response.async_set_speech(response_text)
 
@@ -92,7 +87,7 @@ class OpenClawConversationAgent(conversation.AbstractConversationAgent):
         )
 
     async def _call_openclaw(
-        self, messages: list[dict], conversation_id: str
+        self, text: str, conversation_id: str
     ) -> str:
         """Call OpenClaw chat completions API with streaming."""
         headers = {
@@ -105,7 +100,7 @@ class OpenClawConversationAgent(conversation.AbstractConversationAgent):
             api_messages.append(
                 {"role": "system", "content": self._system_prompt}
             )
-        api_messages.extend(messages)
+        api_messages.append({"role": "user", "content": text})
 
         payload = {
             "model": self._model,
