@@ -12,9 +12,11 @@ from .const import (
     CONF_API_KEY,
     CONF_BASE_URL,
     CONF_MODEL,
+    CONF_SYSTEM_PROMPT,
     CONF_TIMEOUT,
     DEFAULT_BASE_URL,
     DEFAULT_MODEL,
+    DEFAULT_SYSTEM_PROMPT,
     DEFAULT_TIMEOUT,
     DOMAIN,
 )
@@ -27,6 +29,13 @@ class OpenClawConversationConfigFlow(
 
     VERSION = 1
 
+    @staticmethod
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> OpenClawOptionsFlowHandler:
+        """Get the options flow handler."""
+        return OpenClawOptionsFlowHandler(config_entry)
+
     async def async_step_user(self, user_input=None):
         """Handle the initial step."""
         errors = {}
@@ -35,7 +44,6 @@ class OpenClawConversationConfigFlow(
             base_url = user_input[CONF_BASE_URL].rstrip("/")
             api_key = user_input[CONF_API_KEY]
 
-            # Test connection
             try:
                 async with aiohttp.ClientSession() as session:
                     headers = {
@@ -52,7 +60,7 @@ class OpenClawConversationConfigFlow(
                         f"{base_url}/v1/chat/completions",
                         json=payload,
                         headers=headers,
-                        timeout=aiohttp.ClientTimeout(total=15),
+                        timeout=aiohttp.ClientTimeout(total=30),
                     ) as resp:
                         if resp.status == 401:
                             errors["base"] = "invalid_auth"
@@ -76,6 +84,9 @@ class OpenClawConversationConfigFlow(
                         CONF_TIMEOUT: user_input.get(
                             CONF_TIMEOUT, DEFAULT_TIMEOUT
                         ),
+                        CONF_SYSTEM_PROMPT: user_input.get(
+                            CONF_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT
+                        ),
                     },
                 )
 
@@ -96,7 +107,58 @@ class OpenClawConversationConfigFlow(
                     vol.Optional(
                         CONF_TIMEOUT, default=DEFAULT_TIMEOUT
                     ): vol.Coerce(int),
+                    vol.Optional(
+                        CONF_SYSTEM_PROMPT, default=DEFAULT_SYSTEM_PROMPT
+                    ): str,
                 }
             ),
             errors=errors,
+        )
+
+
+class OpenClawOptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle options for OpenClaw Conversation."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize options flow."""
+        self.config_entry = config_entry
+
+    async def async_step_init(self, user_input=None):
+        """Manage the options."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        CONF_MODEL,
+                        default=self.config_entry.options.get(
+                            CONF_MODEL,
+                            self.config_entry.data.get(
+                                CONF_MODEL, DEFAULT_MODEL
+                            ),
+                        ),
+                    ): str,
+                    vol.Optional(
+                        CONF_TIMEOUT,
+                        default=self.config_entry.options.get(
+                            CONF_TIMEOUT,
+                            self.config_entry.data.get(
+                                CONF_TIMEOUT, DEFAULT_TIMEOUT
+                            ),
+                        ),
+                    ): vol.Coerce(int),
+                    vol.Optional(
+                        CONF_SYSTEM_PROMPT,
+                        default=self.config_entry.options.get(
+                            CONF_SYSTEM_PROMPT,
+                            self.config_entry.data.get(
+                                CONF_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT
+                            ),
+                        ),
+                    ): str,
+                }
+            ),
         )

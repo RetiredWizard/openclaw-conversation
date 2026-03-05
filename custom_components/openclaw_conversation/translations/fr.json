@@ -9,7 +9,11 @@
           "base_url": "URL du Gateway OpenClaw",
           "api_key": "Token API",
           "model": "Modèle",
-          "timeout": "Timeout (secondes)"
+          "timeout": "Timeout (secondes)",
+          "system_prompt": "Prompt système"
+        },
+        "data_description": {
+          "system_prompt": "Instructions envoyées avant chaque conversation (ex : réponses courtes pour la voix)"
         }
       }
     },
@@ -17,6 +21,18 @@
       "cannot_connect": "Impossible de se connecter au Gateway OpenClaw. Vérifiez l'URL.",
       "invalid_auth": "Token API invalide.",
       "endpoint_disabled": "L'endpoint Chat Completions n'est pas activé sur le Gateway."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options OpenClaw Conversation",
+        "data": {
+          "model": "Modèle",
+          "timeout": "Timeout (secondes)",
+          "system_prompt": "Prompt système"
+        }
+      }
     }
   }
 }
