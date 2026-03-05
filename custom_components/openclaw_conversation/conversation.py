@@ -82,7 +82,7 @@ class OpenClawConversationAgent(conversation.AbstractConversationAgent):
                 len(response_text),
             )
         except Exception as err:
-            _LOGGER.error("Error calling OpenClaw: %s", err)
+            _LOGGER.error("Error calling OpenClaw: %s: %s", type(err).__name__, err)
             response_text = "Erreur de communication avec OpenClaw."
 
         messages.append({"role": "assistant", "content": response_text})
@@ -130,22 +130,38 @@ class OpenClawConversationAgent(conversation.AbstractConversationAgent):
                     f"OpenClaw returned {resp.status}: {body[:200]}"
                 )
 
+            # Read full response body then parse SSE lines
+            raw = await resp.text()
             content = ""
-            async for line in resp.content:
-                decoded = line.decode("utf-8").strip()
-                if not decoded or not decoded.startswith("data: "):
+            for line in raw.splitlines():
+                line = line.strip()
+                if not line or not line.startswith("data: "):
                     continue
-                data_str = decoded[6:]
+                data_str = line[6:]
                 if data_str == "[DONE]":
                     break
                 try:
                     chunk = json_mod.loads(data_str)
-                    delta = chunk.get("choices", [{}])[0].get("delta", {})
+                    delta = chunk.get("choices", [{}])[0].get(
+                        "delta", {}
+                    )
                     content += delta.get("content", "")
                 except (json_mod.JSONDecodeError, IndexError, KeyError):
                     continue
 
+            # Fallback: try non-streaming response format
+            if not content and raw:
+                try:
+                    data = json_mod.loads(raw)
+                    choices = data.get("choices", [])
+                    if choices:
+                        content = choices[0]["message"]["content"]
+                except (json_mod.JSONDecodeError, IndexError, KeyError):
+                    pass
+
             if not content:
-                raise RuntimeError("No response from OpenClaw")
+                raise RuntimeError(
+                    f"No response from OpenClaw. Raw: {raw[:200]}"
+                )
 
             return content
