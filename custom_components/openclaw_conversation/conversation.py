@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import json as json_mod
 import logging
+import re
 import time
 from typing import Literal
 
@@ -19,14 +21,18 @@ from .const import (
     CONF_API_KEY,
     CONF_BASE_URL,
     CONF_MODEL,
+    CONF_STRIP_EMOJI,
     CONF_SYSTEM_PROMPT,
     CONF_TIMEOUT,
     DEFAULT_MODEL,
+    DEFAULT_STRIP_EMOJI,
     DEFAULT_SYSTEM_PROMPT,
     DEFAULT_TIMEOUT,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+_EMOJI_PATTERN = re.compile("[\U00010000-\U0010ffff]", flags=re.UNICODE)
 
 
 class OpenClawConversationAgent(conversation.AbstractConversationAgent):
@@ -46,6 +52,7 @@ class OpenClawConversationAgent(conversation.AbstractConversationAgent):
         self._system_prompt = entry.options.get(
             CONF_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT
         )
+        self._strip_emoji = entry.options.get(CONF_STRIP_EMOJI, DEFAULT_STRIP_EMOJI)
 
     @property
     def attribution(self) -> dict[str, str]:
@@ -74,9 +81,21 @@ class OpenClawConversationAgent(conversation.AbstractConversationAgent):
                 elapsed,
                 len(response_text),
             )
+        except asyncio.TimeoutError:
+            _LOGGER.error("OpenClaw request timed out after %ds", self._timeout)
+            response_text = "OpenClaw a mis trop de temps à répondre."
+        except aiohttp.ClientError as err:
+            _LOGGER.error("Network error calling OpenClaw: %s", err)
+            response_text = "Erreur réseau avec OpenClaw."
+        except asyncio.CancelledError:
+            _LOGGER.warning("OpenClaw request was cancelled by Home Assistant")
+            response_text = "Requête annulée."
         except Exception as err:
             _LOGGER.error("Error calling OpenClaw: %s: %s", type(err).__name__, err)
             response_text = "Erreur de communication avec OpenClaw."
+
+        if self._strip_emoji:
+            response_text = _EMOJI_PATTERN.sub("", response_text)
 
         response = intent.IntentResponse(language=user_input.language)
         response.async_set_speech(response_text)

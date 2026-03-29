@@ -27,8 +27,13 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up OpenClaw Conversation from a config entry."""
     timeout = entry.options.get(CONF_TIMEOUT, DEFAULT_TIMEOUT)
+    if timeout and timeout > 0:
+        client_timeout = aiohttp.ClientTimeout(total=timeout)
+    else:
+        # timeout=0 disables the total response timeout, keep a 30s connect timeout
+        client_timeout = aiohttp.ClientTimeout(total=None, connect=30)
     session = aiohttp.ClientSession(
-        timeout=aiohttp.ClientTimeout(total=timeout),
+        timeout=client_timeout,
         connector=aiohttp.TCPConnector(keepalive_timeout=300),
     )
 

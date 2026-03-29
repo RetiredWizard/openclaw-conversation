@@ -9,11 +9,12 @@
           "base_url": "URL du Gateway OpenClaw",
           "api_key": "Token API",
           "model": "Modèle",
-          "timeout": "Timeout (secondes)",
+          "timeout": "Timeout (secondes, 0 = illimité)",
           "system_prompt": "Prompt système"
         },
         "data_description": {
-          "system_prompt": "Instructions envoyées avant chaque conversation (ex : réponses courtes pour la voix)"
+          "system_prompt": "Instructions envoyées avant chaque conversation (ex : réponses courtes pour la voix)",
+          "timeout": "Mettre à 0 pour désactiver le timeout (recommandé pour les requêtes longues)"
         }
       }
     },
@@ -29,8 +30,12 @@
         "title": "Options OpenClaw Conversation",
         "data": {
           "model": "Modèle",
-          "timeout": "Timeout (secondes)",
-          "system_prompt": "Prompt système"
+          "timeout": "Timeout (secondes, 0 = illimité)",
+          "system_prompt": "Prompt système",
+          "strip_emoji": "Supprimer les emojis des réponses"
+        },
+        "data_description": {
+          "timeout": "Mettre à 0 pour désactiver le timeout (recommandé pour les requêtes longues)"
         }
       }
     }

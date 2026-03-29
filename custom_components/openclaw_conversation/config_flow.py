@@ -12,10 +12,12 @@ from .const import (
     CONF_API_KEY,
     CONF_BASE_URL,
     CONF_MODEL,
+    CONF_STRIP_EMOJI,
     CONF_SYSTEM_PROMPT,
     CONF_TIMEOUT,
     DEFAULT_BASE_URL,
     DEFAULT_MODEL,
+    DEFAULT_STRIP_EMOJI,
     DEFAULT_SYSTEM_PROMPT,
     DEFAULT_TIMEOUT,
     DOMAIN,
@@ -159,6 +161,12 @@ class OpenClawOptionsFlowHandler(config_entries.OptionsFlow):
                             ),
                         ),
                     ): str,
+                    vol.Optional(
+                        CONF_STRIP_EMOJI,
+                        default=self.config_entry.options.get(
+                            CONF_STRIP_EMOJI, DEFAULT_STRIP_EMOJI
+                        ),
+                    ): bool,
                 }
             ),
         )
