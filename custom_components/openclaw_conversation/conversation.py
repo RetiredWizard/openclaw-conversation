@@ -32,7 +32,7 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-_EMOJI_PATTERN = re.compile("[\U00010000-\U0010ffff]", flags=re.UNICODE)
+_EMOJI_PATTERN = re.compile("[\U00010000-\U0010ffff\u2600-\u26ff]", flags=re.UNICODE)
 
 
 class OpenClawConversationAgent(conversation.AbstractConversationAgent):
@@ -53,6 +53,10 @@ class OpenClawConversationAgent(conversation.AbstractConversationAgent):
             CONF_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT
         )
         self._strip_emoji = entry.options.get(CONF_STRIP_EMOJI, DEFAULT_STRIP_EMOJI)
+
+        # Ensure a consistent persistent session for HA voice use.
+        self._session_key = "agent:main:homeassistant"
+        self._initial_welcome_sent = False
 
     @property
     def attribution(self) -> dict[str, str]:
@@ -94,6 +98,11 @@ class OpenClawConversationAgent(conversation.AbstractConversationAgent):
             _LOGGER.error("Error calling OpenClaw: %s: %s", type(err).__name__, err)
             response_text = "Erreur de communication avec OpenClaw."
 
+        # Normalize temperature notation and strip colons
+        response_text = response_text.replace("°F", "°Fahrenheit")
+        response_text = response_text.replace(":", "")
+        response_text = response_text.replace("*", "")
+
         if self._strip_emoji:
             response_text = _EMOJI_PATTERN.sub("", response_text)
 
@@ -109,22 +118,39 @@ class OpenClawConversationAgent(conversation.AbstractConversationAgent):
         self, text: str, conversation_id: str
     ) -> str:
         """Call OpenClaw chat completions API with streaming."""
+        # OpenClaw OpenAI-compatible endpoint is stateless by default.
+        # Use a stable `user` and/or `x-openclaw-session-key` to keep session context.
         headers = {
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
+            "x-openclaw-session-key": self._session_key,
+            "x-openclaw-message-channel": "homeassistant",
         }
 
         api_messages = []
+
+        # Global system prompt always at the top (if configured).
         if self._system_prompt:
             api_messages.append(
                 {"role": "system", "content": self._system_prompt}
             )
+
+        # One-time welcome/context priming on first HA startup.
+        if not self._initial_welcome_sent:
+            welcome_text = (
+                "You should read the following files in /home/david/.openclaw/workspace/ "
+                "for context and answers to who you are: SOUL.md, USER.md, AGENT.md and MEMORY.md"
+            )
+            text = welcome_text + " " + text
+            self._initial_welcome_sent = True
+
         api_messages.append({"role": "user", "content": text})
 
         payload = {
             "model": self._model,
             "messages": api_messages,
             "stream": True,
+            "user": "homeassistant",
         }
 
         async with self._session.post(
