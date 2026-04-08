@@ -7,6 +7,16 @@
 
 **Turn your [OpenClaw](https://openclaw.ai) agent into a Home Assistant voice assistant.**
 
+This fork keeps the standard `POST /v1/chat/completions` integration flow, but also forwards stable Home Assistant identity metadata when available:
+
+- `conversation_id`
+- `user_id`
+- `device_id`
+- `language`
+- `local_date`
+
+The goal is to let OpenClaw apply its own routing, session, and context policy with better identity continuity, without breaking existing installations that already use the stock chat completions endpoint.
+
 Say a wake word, ask a question, get a spoken answer — powered by your own OpenClaw agent with all its tools, memory, and personality.
 
 ```
@@ -19,6 +29,15 @@ Say a wake word, ask a question, get a spoken answer — powered by your own Ope
 - Voice control through HA Voice PE, phone app, or browser
 - Works with any STT/TTS engine (Whisper, Piper, HA Cloud...)
 - Simple setup: just point it at your OpenClaw Gateway
+- Stable HA identity metadata forwarding for backends that support identity-aware routing or session handling
+
+## What this fork changes
+
+- Keeps using the standard OpenClaw endpoint: `/v1/chat/completions`
+- Preserves backward compatibility for existing users
+- Forwards `conversation_id`, `user_id`, `device_id`, `language`, and `local_date` as extra request fields
+- Does not force any new session policy in the Home Assistant plugin
+- Lets the OpenClaw backend decide how identity continuity should be used
 
 ## Installation
 
@@ -89,6 +108,18 @@ Add this to your `openclaw.json` inside the `gateway` block:
 ```
 
 Restart your gateway after the change.
+
+### Identity metadata
+
+This fork still uses the normal chat completions endpoint, but it also forwards extra Home Assistant request metadata when available:
+
+- `conversation_id`
+- `user_id`
+- `device_id`
+- `language`
+- `local_date`
+
+OpenClaw backends that understand these fields can use them for routing or session continuity. Backends that ignore unknown fields should continue to work as before.
 
 ### Network notes
 

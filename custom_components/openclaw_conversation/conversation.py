@@ -7,7 +7,7 @@ import json as json_mod
 import logging
 import re
 import time
-from typing import Literal
+from typing import Any, Literal
 
 import aiohttp
 
@@ -15,6 +15,7 @@ from homeassistant.components import conversation
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import intent
+from homeassistant.util import dt as dt_util
 from homeassistant.util import ulid
 
 from .const import (
@@ -38,17 +39,17 @@ _EMOJI_PATTERN = re.compile("[\U00010000-\U0010ffff\u2600-\u26ff]", flags=re.UNI
 class OpenClawConversationAgent(conversation.AbstractConversationAgent):
     """OpenClaw conversation agent."""
 
-    def __init__(
-        self, hass: HomeAssistant, entry: ConfigEntry, session: aiohttp.ClientSession
-    ) -> None:
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize the agent."""
         self.hass = hass
         self.entry = entry
-        self._session = session
-        self._base_url = entry.data[CONF_BASE_URL]
-        self._api_key = entry.data[CONF_API_KEY]
+        config = {**entry.data, **entry.options}
+        self._base_url = config[CONF_BASE_URL]
+        self._api_key = config[CONF_API_KEY]
         self._model = entry.options.get(CONF_MODEL, DEFAULT_MODEL)
-        self._timeout = entry.options.get(CONF_TIMEOUT, DEFAULT_TIMEOUT)
+        self._timeout = self._normalize_timeout(
+            config.get(CONF_TIMEOUT, DEFAULT_TIMEOUT)
+        )
         self._system_prompt = entry.options.get(
             CONF_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT
         )
@@ -73,11 +74,12 @@ class OpenClawConversationAgent(conversation.AbstractConversationAgent):
     ) -> conversation.ConversationResult:
         """Process a sentence."""
         conversation_id = user_input.conversation_id or ulid.ulid_now()
+        principal = self._resolve_principal(user_input)
 
         try:
             start = time.monotonic()
             response_text = await self._call_openclaw(
-                user_input.text, conversation_id
+                user_input.text, conversation_id, principal
             )
             elapsed = time.monotonic() - start
             _LOGGER.info(
@@ -102,6 +104,7 @@ class OpenClawConversationAgent(conversation.AbstractConversationAgent):
         response_text = response_text.replace("°F", "°Fahrenheit")
         response_text = response_text.replace(":", "")
         response_text = response_text.replace("*", "")
+        response_text = response_text.replace("OFF", "off")
 
         if self._strip_emoji:
             response_text = _EMOJI_PATTERN.sub("", response_text)
@@ -114,8 +117,46 @@ class OpenClawConversationAgent(conversation.AbstractConversationAgent):
             conversation_id=conversation_id,
         )
 
+    def _resolve_principal(
+        self, user_input: conversation.ConversationInput
+    ) -> dict[str, str]:
+        """Extract stable HA identity fields when available."""
+        context = getattr(user_input, "context", None)
+        user_id = getattr(context, "user_id", None) if context else None
+        device_id = getattr(user_input, "device_id", None)
+        return {
+            "user_id": user_id or "",
+            "device_id": device_id or "",
+        }
+
+    def _normalize_timeout(self, value: Any) -> int:
+        """Normalize the configured timeout to a non-negative integer."""
+        try:
+            return max(int(value), 0)
+        except (TypeError, ValueError):
+            return DEFAULT_TIMEOUT
+
+    def _build_timeout(self) -> aiohttp.ClientTimeout:
+        """Build the request timeout configuration."""
+        connect_timeout = 10
+        if self._timeout <= 0:
+            return aiohttp.ClientTimeout(
+                total=None,
+                connect=connect_timeout,
+                sock_connect=connect_timeout,
+                sock_read=None,
+            )
+
+        total_timeout = max(int(self._timeout), 1)
+        return aiohttp.ClientTimeout(
+            total=total_timeout,
+            connect=min(connect_timeout, total_timeout),
+            sock_connect=min(connect_timeout, total_timeout),
+            sock_read=None,
+        )
+
     async def _call_openclaw(
-        self, text: str, conversation_id: str
+        self, text: str, conversation_id: str, principal: dict[str, str]
     ) -> str:
         """Call OpenClaw chat completions API with streaming."""
         # OpenClaw OpenAI-compatible endpoint is stateless by default.
@@ -151,51 +192,57 @@ class OpenClawConversationAgent(conversation.AbstractConversationAgent):
             "messages": api_messages,
             "stream": True,
             "user": "homeassistant",
+            "language": self.hass.config.language,
+            "local_date": dt_util.now().date().isoformat(),
+            "conversation_id": conversation_id,
+            "user_id": principal["user_id"],
+            "device_id": principal["device_id"],
         }
 
-        async with self._session.post(
-            f"{self._base_url}/v1/chat/completions",
-            json=payload,
-            headers=headers,
-        ) as resp:
-            if resp.status != 200:
-                body = await resp.text()
-                raise RuntimeError(
-                    f"OpenClaw returned {resp.status}: {body[:200]}"
-                )
 
-            # Read full response body then parse SSE lines
-            raw = await resp.text()
-            content = ""
-            for line in raw.splitlines():
-                line = line.strip()
-                if not line or not line.startswith("data: "):
-                    continue
-                data_str = line[6:]
-                if data_str == "[DONE]":
-                    break
-                try:
-                    chunk = json_mod.loads(data_str)
-                    delta = chunk.get("choices", [{}])[0].get(
-                        "delta", {}
+        timeout = self._build_timeout()
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(
+                f"{self._base_url}/v1/chat/completions",
+                json=payload,
+                headers=headers,
+            ) as resp:
+                if resp.status != 200:
+                    body = await resp.text()
+                    raise RuntimeError(
+                        f"OpenClaw returned {resp.status}: {body[:200]}"
                     )
-                    content += delta.get("content", "")
-                except (json_mod.JSONDecodeError, IndexError, KeyError):
-                    continue
 
-            # Fallback: try non-streaming response format
-            if not content and raw:
-                try:
-                    data = json_mod.loads(raw)
-                    choices = data.get("choices", [])
-                    if choices:
-                        content = choices[0]["message"]["content"]
-                except (json_mod.JSONDecodeError, IndexError, KeyError):
-                    pass
+                raw = await resp.text()
+                content = ""
+                for line in raw.splitlines():
+                    line = line.strip()
+                    if not line or not line.startswith("data: "):
+                        continue
+                    data_str = line[6:]
+                    if data_str == "[DONE]":
+                        break
+                    try:
+                        chunk = json_mod.loads(data_str)
+                        delta = chunk.get("choices", [{}])[0].get(
+                            "delta", {}
+                        )
+                        content += delta.get("content", "")
+                    except (json_mod.JSONDecodeError, IndexError, KeyError):
+                        continue
 
-            if not content:
-                raise RuntimeError(
-                    f"No response from OpenClaw. Raw: {raw[:200]}"
-                )
+                if not content and raw:
+                    try:
+                        data = json_mod.loads(raw)
+                        choices = data.get("choices", [])
+                        if choices:
+                            content = choices[0]["message"]["content"]
+                    except (json_mod.JSONDecodeError, IndexError, KeyError):
+                        pass
 
-            return content
+                if not content:
+                    raise RuntimeError(
+                        f"No response from OpenClaw. Raw: {raw[:200]}"
+                    )
+
+                return content
