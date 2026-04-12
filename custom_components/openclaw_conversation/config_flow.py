@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import aiohttp
 import voluptuous as vol
 
@@ -12,17 +14,20 @@ from .const import (
     CONF_API_KEY,
     CONF_BASE_URL,
     CONF_MODEL,
+    CONF_SESSION_KEY,
     CONF_STRIP_EMOJI,
     CONF_SYSTEM_PROMPT,
     CONF_TIMEOUT,
     DEFAULT_BASE_URL,
     DEFAULT_MODEL,
+    DEFAULT_SESSION_KEY,
     DEFAULT_STRIP_EMOJI,
     DEFAULT_SYSTEM_PROMPT,
     DEFAULT_TIMEOUT,
     DOMAIN,
 )
 
+_LOGGER = logging.getLogger(__name__)
 
 class OpenClawConversationConfigFlow(
     config_entries.ConfigFlow, domain=DOMAIN
@@ -46,6 +51,7 @@ class OpenClawConversationConfigFlow(
             base_url = user_input[CONF_BASE_URL].rstrip("/")
             api_key = user_input[CONF_API_KEY]
 
+            url = f"{base_url}/v1/chat/completions"
             try:
                 async with aiohttp.ClientSession() as session:
                     headers = {
@@ -58,19 +64,56 @@ class OpenClawConversationConfigFlow(
                             {"role": "user", "content": "ping"}
                         ],
                     }
+                    _LOGGER.debug(
+                        "Validating OpenClaw Gateway: POST %s (model=%s)",
+                        url,
+                        payload["model"],
+                    )
                     async with session.post(
-                        f"{base_url}/v1/chat/completions",
+                        url,
                         json=payload,
                         headers=headers,
                         timeout=aiohttp.ClientTimeout(total=30),
                     ) as resp:
-                        if resp.status == 401:
+                        _LOGGER.debug(
+                            "OpenClaw Gateway validation response: %s %s",
+                            resp.status,
+                            resp.reason,
+                        )
+                        if resp.status == 200:
+                            pass
+                        elif resp.status == 401:
                             errors["base"] = "invalid_auth"
+                        elif resp.status == 403:
+                            errors["base"] = "forbidden"
+                        elif resp.status == 404:
+                            errors["base"] = "endpoint_not_found"
                         elif resp.status == 405:
                             errors["base"] = "endpoint_disabled"
-                        elif resp.status not in (200,):
+                        elif 500 <= resp.status < 600:
+                            errors["base"] = "server_error"
+                        else:
+                            _LOGGER.warning(
+                                "OpenClaw Gateway returned unexpected "
+                                "status %s for %s",
+                                resp.status,
+                                url,
+                            )
                             errors["base"] = "cannot_connect"
-            except (aiohttp.ClientError, TimeoutError):
+            except aiohttp.ClientConnectorError as err:
+                _LOGGER.warning(
+                    "OpenClaw Gateway unreachable at %s: %s", url, err
+                )
+                errors["base"] = "cannot_reach"
+            except TimeoutError:
+                _LOGGER.warning(
+                    "OpenClaw Gateway validation timed out at %s", url
+                )
+                errors["base"] = "timeout"
+            except aiohttp.ClientError as err:
+                _LOGGER.warning(
+                    "OpenClaw Gateway client error at %s: %s", url, err
+                )
                 errors["base"] = "cannot_connect"
 
             if not errors:
@@ -88,6 +131,9 @@ class OpenClawConversationConfigFlow(
                         ),
                         CONF_SYSTEM_PROMPT: user_input.get(
                             CONF_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT
+                        ),
+                        CONF_SESSION_KEY: user_input.get(
+                            CONF_SESSION_KEY, DEFAULT_SESSION_KEY
                         ),
                     },
                 )
@@ -111,6 +157,9 @@ class OpenClawConversationConfigFlow(
                     ): vol.Coerce(int),
                     vol.Optional(
                         CONF_SYSTEM_PROMPT, default=DEFAULT_SYSTEM_PROMPT
+                    ): str,
+                    vol.Optional(
+                        CONF_SESSION_KEY, default=DEFAULT_SESSION_KEY
                     ): str,
                 }
             ),
@@ -136,34 +185,43 @@ class OpenClawOptionsFlowHandler(config_entries.OptionsFlow):
                 {
                     vol.Optional(
                         CONF_MODEL,
-                        default=self.config_entry.options.get(
+                        default=self._config_entry.options.get(
                             CONF_MODEL,
-                            self.config_entry.data.get(
+                            self._config_entry.data.get(
                                 CONF_MODEL, DEFAULT_MODEL
                             ),
                         ),
                     ): str,
                     vol.Optional(
                         CONF_TIMEOUT,
-                        default=self.config_entry.options.get(
+                        default=self._config_entry.options.get(
                             CONF_TIMEOUT,
-                            self.config_entry.data.get(
+                            self._config_entry.data.get(
                                 CONF_TIMEOUT, DEFAULT_TIMEOUT
                             ),
                         ),
                     ): vol.Coerce(int),
                     vol.Optional(
                         CONF_SYSTEM_PROMPT,
-                        default=self.config_entry.options.get(
+                        default=self._config_entry.options.get(
                             CONF_SYSTEM_PROMPT,
-                            self.config_entry.data.get(
+                            self._config_entry.data.get(
                                 CONF_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT
                             ),
                         ),
                     ): str,
                     vol.Optional(
+                        CONF_SESSION_KEY,
+                        default=self._config_entry.options.get(
+                            CONF_SESSION_KEY,
+                            self._config_entry.data.get(
+                                CONF_SESSION_KEY, DEFAULT_SESSION_KEY
+                            ),
+                        ),
+                    ): str,
+                    vol.Optional(
                         CONF_STRIP_EMOJI,
-                        default=self.config_entry.options.get(
+                        default=self._config_entry.options.get(
                             CONF_STRIP_EMOJI, DEFAULT_STRIP_EMOJI
                         ),
                     ): bool,

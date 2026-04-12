@@ -20,8 +20,13 @@
     },
     "error": {
       "cannot_connect": "Unable to connect to OpenClaw Gateway. Check the URL.",
+      "cannot_reach": "Gateway unreachable. Check that Home Assistant can route to the gateway host (network, firewall, Docker bridge, DNS) and that the port is open.",
+      "timeout": "Gateway took too long to respond during validation. Check gateway load or try again.",
       "invalid_auth": "Invalid API token.",
-      "endpoint_disabled": "Chat Completions endpoint is not enabled on the Gateway."
+      "forbidden": "Access forbidden by the gateway (403). Check token scopes or gateway auth policy.",
+      "endpoint_not_found": "Endpoint /v1/chat/completions not found (404). Check the base URL — it should be the gateway root (e.g. http://host:18789), not include /v1.",
+      "endpoint_disabled": "Chat Completions endpoint is not enabled on the Gateway.",
+      "server_error": "Gateway returned a server error (5xx). Check the gateway logs."
     }
   },
   "options": {

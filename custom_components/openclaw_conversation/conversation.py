@@ -22,10 +22,12 @@ from .const import (
     CONF_API_KEY,
     CONF_BASE_URL,
     CONF_MODEL,
+    CONF_SESSION_KEY,
     CONF_STRIP_EMOJI,
     CONF_SYSTEM_PROMPT,
     CONF_TIMEOUT,
     DEFAULT_MODEL,
+    DEFAULT_SESSION_KEY,
     DEFAULT_STRIP_EMOJI,
     DEFAULT_SYSTEM_PROMPT,
     DEFAULT_TIMEOUT,
@@ -54,9 +56,9 @@ class OpenClawConversationAgent(conversation.AbstractConversationAgent):
             CONF_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT
         )
         self._strip_emoji = entry.options.get(CONF_STRIP_EMOJI, DEFAULT_STRIP_EMOJI)
+        self._session_key = config.get(CONF_SESSION_KEY, DEFAULT_SESSION_KEY)
 
         # Ensure a consistent persistent session for HA voice use.
-        self._session_key = "agent:main:homeassistant"
         self._initial_welcome_sent = False
 
     @property
@@ -89,21 +91,22 @@ class OpenClawConversationAgent(conversation.AbstractConversationAgent):
             )
         except asyncio.TimeoutError:
             _LOGGER.error("OpenClaw request timed out after %ds", self._timeout)
-            response_text = "OpenClaw a mis trop de temps à répondre."
+            response_text = "OpenClaw request timed out."
         except aiohttp.ClientError as err:
             _LOGGER.error("Network error calling OpenClaw: %s", err)
-            response_text = "Erreur réseau avec OpenClaw."
+            response_text = "Network error calling OpenClaw."
         except asyncio.CancelledError:
             _LOGGER.warning("OpenClaw request was cancelled by Home Assistant")
-            response_text = "Requête annulée."
+            response_text = "OpenClaw request was cancelled by Home Assistant."
         except Exception as err:
             _LOGGER.error("Error calling OpenClaw: %s: %s", type(err).__name__, err)
-            response_text = "Erreur de communication avec OpenClaw."
+            response_text = "Error calling OpenClaw."
 
         # Normalize temperature notation and strip colons
         response_text = response_text.replace("°F", "°Fahrenheit")
         response_text = response_text.replace(":", "")
         response_text = response_text.replace("*", "")
+        response_text = response_text.replace("#", "")
         response_text = response_text.replace("OFF", "off")
 
         if self._strip_emoji:
@@ -179,8 +182,8 @@ class OpenClawConversationAgent(conversation.AbstractConversationAgent):
         # One-time welcome/context priming on first HA startup.
         if not self._initial_welcome_sent:
             welcome_text = (
-                "You should read the following files in /home/david/.openclaw/workspace/ "
-                "for context and answers to who you are: SOUL.md, USER.md, AGENT.md and MEMORY.md"
+                "You should read the following files in your workspace folder"
+                "for context and answers to who you are: SOUL.md, USER.md, AGENT.md and MEMORY.md."
             )
             text = welcome_text + " " + text
             self._initial_welcome_sent = True
@@ -198,7 +201,6 @@ class OpenClawConversationAgent(conversation.AbstractConversationAgent):
             "user_id": principal["user_id"],
             "device_id": principal["device_id"],
         }
-
 
         timeout = self._build_timeout()
         async with aiohttp.ClientSession(timeout=timeout) as session:

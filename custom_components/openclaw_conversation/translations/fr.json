@@ -20,8 +20,13 @@
     },
     "error": {
       "cannot_connect": "Impossible de se connecter au Gateway OpenClaw. Vérifiez l'URL.",
+      "cannot_reach": "Gateway injoignable. Vérifiez que Home Assistant peut router vers l'hôte du gateway (réseau, firewall, bridge Docker, DNS) et que le port est ouvert.",
+      "timeout": "Le gateway a mis trop de temps à répondre pendant la validation. Vérifiez la charge du gateway ou réessayez.",
       "invalid_auth": "Token API invalide.",
-      "endpoint_disabled": "L'endpoint Chat Completions n'est pas activé sur le Gateway."
+      "forbidden": "Accès interdit par le gateway (403). Vérifiez les droits du token ou la politique d'authentification du gateway.",
+      "endpoint_not_found": "Endpoint /v1/chat/completions introuvable (404). Vérifiez l'URL de base — elle doit pointer vers la racine du gateway (ex: http://host:18789), sans /v1.",
+      "endpoint_disabled": "L'endpoint Chat Completions n'est pas activé sur le Gateway.",
+      "server_error": "Le gateway a renvoyé une erreur serveur (5xx). Vérifiez les logs du gateway."
     }
   },
   "options": {
