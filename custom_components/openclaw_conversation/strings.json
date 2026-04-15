@@ -26,7 +26,9 @@
       "forbidden": "Access forbidden by the gateway (403). Check token scopes or gateway auth policy.",
       "endpoint_not_found": "Endpoint /v1/chat/completions not found (404). Check the base URL — it should be the gateway root (e.g. http://host:18789), not include /v1.",
       "endpoint_disabled": "Chat Completions endpoint is not enabled on the Gateway. Add gateway.http.endpoints.chatCompletions.enabled: true to your OpenClaw config.",
-      "server_error": "Gateway returned a server error (5xx). Check the gateway logs."
+      "server_error": "Gateway returned a server error (5xx). Check the gateway logs.",
+      "bad_request": "Gateway rejected the request (400). Check that the model name and payload are valid — see the Home Assistant logs for the gateway response body.",
+      "model_not_available": "The configured model is not available on this OpenClaw Gateway. Try a model that exists on your gateway (e.g. 'openclaw:main')."      
     }
   },
   "options": {

@@ -216,35 +216,78 @@ class OpenClawConversationAgent(conversation.AbstractConversationAgent):
                     )
 
                 raw = await resp.text()
+                _LOGGER.debug("OpenClaw raw response: %s", raw)
                 content = ""
+                stream_error: str | None = None
+                saw_done = False
                 for line in raw.splitlines():
                     line = line.strip()
                     if not line or not line.startswith("data: "):
                         continue
                     data_str = line[6:]
                     if data_str == "[DONE]":
+                        saw_done = True
                         break
                     try:
                         chunk = json_mod.loads(data_str)
+                    except json_mod.JSONDecodeError:
+                        continue
+                    if isinstance(chunk, dict) and "error" in chunk:
+                        err = chunk["error"]
+                        if isinstance(err, dict):
+                            stream_error = (
+                                err.get("message")
+                                or err.get("code")
+                                or json_mod.dumps(err)
+                            )
+                        else:
+                            stream_error = str(err)
+                        continue
+                    try:
                         delta = chunk.get("choices", [{}])[0].get(
                             "delta", {}
                         )
                         content += delta.get("content", "")
-                    except (json_mod.JSONDecodeError, IndexError, KeyError):
+                    except (IndexError, KeyError, AttributeError):
                         continue
 
                 if not content and raw:
                     try:
                         data = json_mod.loads(raw)
-                        choices = data.get("choices", [])
-                        if choices:
-                            content = choices[0]["message"]["content"]
+                        if isinstance(data, dict) and "error" in data:
+                            err = data["error"]
+                            if isinstance(err, dict):
+                                stream_error = (
+                                    err.get("message")
+                                    or err.get("code")
+                                    or json_mod.dumps(err)
+                                )
+                            else:
+                                stream_error = str(err)
+                        else:
+                            choices = data.get("choices", [])
+                            if choices:
+                                content = choices[0]["message"]["content"]
                     except (json_mod.JSONDecodeError, IndexError, KeyError):
                         pass
 
                 if not content:
+                    if stream_error:
+                        raise RuntimeError(
+                            f"OpenClaw returned an error: {stream_error}"
+                        )
+                    if saw_done:
+                        raise RuntimeError(
+                            "OpenClaw returned an empty stream (received "
+                            "[DONE] with no content). This usually means "
+                            "the gateway timed out before the agent "
+                            "produced a response. Increase "
+                            "agents.defaults.llm.idleTimeoutSeconds in "
+                            "openclaw.json (e.g. 180) and check the "
+                            "gateway logs."
+                        )
                     raise RuntimeError(
-                        f"No response from OpenClaw. Raw: {raw[:200]}"
+                        f"No response from OpenClaw. Raw: {raw[:500]}"
                     )
 
                 return content

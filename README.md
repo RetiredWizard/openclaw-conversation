@@ -65,7 +65,7 @@ Copy `custom_components/openclaw_conversation` into your HA `config/custom_compo
 | Name | Display name (e.g. "OpenClaw") |
 | Gateway URL | `http://<gateway-ip>:<port>` (e.g. `http://192.168.1.100:18789`) |
 | API Token | Your gateway auth token |
-| Model | `openclaw` (default) |
+| Model | `openclaw:main` (default) — must match a model that exists on your gateway |
 | Timeout | `30` seconds |
 
 ### 2. Set up a Voice Assistant
@@ -153,8 +153,10 @@ OpenClaw backends that understand these fields can use them for routing or sessi
 | Problem | Fix |
 |---------|-----|
 | Cannot connect to gateway | Check URL: `curl http://<ip>:<port>/v1/chat/completions`. Check firewall. Don't use `127.0.0.1` across machines. |
+| Model not available | The model name you configured does not exist on your OpenClaw Gateway. Try `openclaw:main` or list the models your gateway exposes. |
 | Endpoint disabled (405) | Enable `chatCompletions` in `openclaw.json`, restart gateway |
 | Invalid auth (401) | Check token. Ensure `gateway.auth.mode` is `"token"` |
+| `No response from OpenClaw` / empty stream / `data: [DONE]` | The gateway opened the stream but never produced a response before closing it. Usually a timeout on the gateway side. Add `agents.defaults.llm.idleTimeoutSeconds: 180` to your `openclaw.json` and restart the gateway. |
 | Red flashing light (Voice PE) | STT failed — check your STT engine config |
 | Agent not in dropdown | Restart HA after installing. Check logs for errors |
 

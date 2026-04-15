@@ -29,6 +29,25 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+def _looks_like_model_error(body: str) -> bool:
+    """Detect gateway errors caused by an unknown or unavailable model."""
+    if not body:
+        return False
+    lowered = body.lower()
+    if "model" not in lowered:
+        return False
+    return any(
+        hint in lowered
+        for hint in (
+            "not found",
+            "not available",
+            "unknown",
+            "invalid",
+            "does not exist",
+            "no such",
+        )
+    )
+
 class OpenClawConversationConfigFlow(
     config_entries.ConfigFlow, domain=DOMAIN
 ):
@@ -75,13 +94,25 @@ class OpenClawConversationConfigFlow(
                         headers=headers,
                         timeout=aiohttp.ClientTimeout(total=30),
                     ) as resp:
+                        body = ""
+                        if resp.status != 200:
+                            try:
+                                body = await resp.text()
+                            except Exception:
+                                body = ""
                         _LOGGER.debug(
-                            "OpenClaw Gateway validation response: %s %s",
+                            "OpenClaw Gateway validation response: %s %s — body=%s",
                             resp.status,
                             resp.reason,
+                            body[:500],
                         )
                         if resp.status == 200:
                             pass
+                        elif resp.status == 400:
+                            if _looks_like_model_error(body):
+                                errors["base"] = "model_not_available"
+                            else:
+                                errors["base"] = "bad_request"
                         elif resp.status == 401:
                             errors["base"] = "invalid_auth"
                         elif resp.status == 403:
@@ -91,13 +122,17 @@ class OpenClawConversationConfigFlow(
                         elif resp.status == 405:
                             errors["base"] = "endpoint_disabled"
                         elif 500 <= resp.status < 600:
-                            errors["base"] = "server_error"
+                            if _looks_like_model_error(body):
+                                errors["base"] = "model_not_available"
+                            else:
+                                errors["base"] = "server_error"                            
                         else:
                             _LOGGER.warning(
                                 "OpenClaw Gateway returned unexpected "
-                                "status %s for %s",
+                                "status %s for %s — body=%s",
                                 resp.status,
                                 url,
+                                body[:500],
                             )
                             errors["base"] = "cannot_connect"
             except aiohttp.ClientConnectorError as err:
